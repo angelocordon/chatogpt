@@ -12,7 +12,7 @@ export type Message = {
 
 type AppState = 'unsupported' | 'loading' | 'ready'
 
-const MODEL = 'Phi-3.5-mini-instruct-q4f16_1-MLC'
+const MODEL = 'Llama-3.2-3B-Instruct-q4f16_1-MLC'
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>(
