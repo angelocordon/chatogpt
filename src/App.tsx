@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { CreateMLCEngine, type MLCEngine, type InitProgressReport } from '@mlc-ai/web-llm'
 import LoadingScreen from './components/LoadingScreen'
 import ChatFeed from './components/ChatFeed'
+import { TITA_CHAT_PROMPT } from './prompts/titaChat'
 
 export type Message = {
   id: string
@@ -47,7 +48,7 @@ export default function App() {
     setIsStreaming(true)
 
     const chunks = await engineRef.current.chat.completions.create({
-      messages: [...messages, { role: 'user', content }],
+      messages: [{ role: 'system', content: TITA_CHAT_PROMPT }, ...messages, { role: 'user', content }],
       stream: true,
     })
 
