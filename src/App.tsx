@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { CreateMLCEngine, type MLCEngine, type InitProgressReport } from '@mlc-ai/web-llm'
 import LoadingScreen from './components/LoadingScreen'
 import ChatFeed from './components/ChatFeed'
 
@@ -8,52 +9,36 @@ export type Message = {
   content: string
 }
 
-type AppState = 'loading' | 'ready'
+type AppState = 'unsupported' | 'loading' | 'ready'
 
-const FAKE_RESPONSE =
-  "I'm a placeholder response. WebLLM integration is coming — when it arrives, I'll run entirely in your browser using WebGPU. No server, no API key, no data leaving your machine."
-
-const LOAD_STAGES: { at: number; text: string }[] = [
-  { at: 0, text: 'Initializing...' },
-  { at: 8, text: 'Downloading model weights...' },
-  { at: 78, text: 'Loading into memory...' },
-  { at: 94, text: 'Finalizing...' },
-]
+const MODEL = 'Phi-3.5-mini-instruct-q4f16_1-MLC'
 
 export default function App() {
-  const [appState, setAppState] = useState<AppState>('loading')
+  const [appState, setAppState] = useState<AppState>(
+    !navigator.gpu ? 'unsupported' : 'loading'
+  )
   const [progress, setProgress] = useState(0)
   const [statusText, setStatusText] = useState('Initializing...')
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
+  const engineRef = useRef<MLCEngine | null>(null)
 
-  // Simulate model loading progress
   useEffect(() => {
-    let current = 0
+    if (appState === 'unsupported') return
 
-    const interval = setInterval(() => {
-      // Ease-out: fast at first, slows as it approaches 100
-      const remaining = 100 - current
-      const step = Math.max(0.2, remaining * 0.03) * (0.6 + Math.random() * 0.8)
-      current = Math.min(100, current + step)
-
-      const pct = Math.floor(current)
-      setProgress(pct)
-
-      const stage = [...LOAD_STAGES].reverse().find(s => pct >= s.at)
-      if (stage) setStatusText(stage.text)
-
-      if (current >= 100) {
-        clearInterval(interval)
-        setTimeout(() => setAppState('ready'), 400)
-      }
-    }, 60)
-
-    return () => clearInterval(interval)
+    CreateMLCEngine(MODEL, {
+      initProgressCallback: (report: InitProgressReport) => {
+        setProgress(Math.round(report.progress * 100))
+        setStatusText(report.text)
+      },
+    }).then(engine => {
+      engineRef.current = engine
+      setAppState('ready')
+    })
   }, [])
 
-  function sendMessage(content: string) {
-    if (isStreaming) return
+  async function sendMessage(content: string) {
+    if (isStreaming || !engineRef.current) return
 
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content }
     const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '' }
@@ -61,23 +46,39 @@ export default function App() {
     setMessages(prev => [...prev, userMsg, assistantMsg])
     setIsStreaming(true)
 
-    let i = 0
-    const interval = setInterval(() => {
-      i++
-      setMessages(prev => {
-        const updated = [...prev]
-        updated[updated.length - 1] = {
-          ...updated[updated.length - 1],
-          content: FAKE_RESPONSE.slice(0, i),
-        }
-        return updated
-      })
+    const chunks = await engineRef.current.chat.completions.create({
+      messages: [...messages, { role: 'user', content }],
+      stream: true,
+    })
 
-      if (i >= FAKE_RESPONSE.length) {
-        clearInterval(interval)
-        setIsStreaming(false)
+    for await (const chunk of chunks) {
+      const delta = chunk.choices[0]?.delta?.content ?? ''
+      if (delta) {
+        setMessages(prev => {
+          const updated = [...prev]
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: updated[updated.length - 1].content + delta,
+          }
+          return updated
+        })
       }
-    }, 18)
+    }
+
+    setIsStreaming(false)
+  }
+
+  if (appState === 'unsupported') {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+        <span className="text-xs tracking-widest text-muted-foreground/60 uppercase">
+          chatogpt
+        </span>
+        <p className="text-sm text-muted-foreground/60">
+          This app requires WebGPU, which is only available in Chrome or Edge on desktop.
+        </p>
+      </div>
+    )
   }
 
   if (appState === 'loading') {
