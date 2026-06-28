@@ -50,6 +50,7 @@ export default function App() {
     const chunks = await engineRef.current.chat.completions.create({
       messages: [{ role: 'system', content: TITA_CHAT_PROMPT }, ...messages, { role: 'user', content }],
       stream: true,
+      max_tokens: 150,
     })
 
     for await (const chunk of chunks) {
