@@ -118,7 +118,7 @@ function MessageRow({ message }: { message: Message }) {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
-        {isUser ? 'You' : 'Assistant'}
+        {isUser ? 'You' : 'Chato'}
       </span>
 
       {isUser ? (
